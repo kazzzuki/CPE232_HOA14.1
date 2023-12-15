@@ -1,0 +1,190 @@
+
+- name: Create Nova Database
+  mysql_db:
+    name: "{{ item }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  loop:
+    - nova_api
+    - nova
+    - nova_cell0
+
+- name: Grant All Privileges on Keystone to localhost
+  mysql_user:
+    name: nova
+    host: "{{ item.host }}"
+    priv: "{{ item.priv }}"
+    password: nova_ogata
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  loop:
+    - { host: 'localhost' , priv: 'nova_api.*:ALL' }
+    - { host: '%' , priv: 'nova_api.*:ALL' }
+    - { host: 'localhost' , priv: 'nova.*:ALL' }
+    - { host: '%' , priv: 'nova.*:ALL' }
+    - { host: 'localhost' , priv: 'nova_cell0.*:ALL' }
+    - { host: '%' , priv: 'nova_cell0.*:ALL' }
+
+- name: Source the admin
+  shell: ". /home/kazuki/admin-openrc"
+
+- name: Create Nova user
+  shell: "openstack user create --domain default --password-prompt nova"
+  async: 3600
+  poll: 0
+
+- name: Add admin role
+  shell: "openstack role add --project service --user nova admin"
+  async: 3600
+  poll: 0
+
+- name: Create nova service entity
+  shell: ' openstack service create --name nova --description "OpenStack Compute" compute '
+  async: 3600
+  poll: 0
+
+- name: Create the compute API service endpoints (publick)
+  shell: " openstack endpoint create --region RegionOne  compute public http://controller:8774/v2.1 "
+  async: 3600
+  poll: 0
+
+- name: Create the compute API service endpoints (internal)
+  shell: " openstack endpoint create --region RegionOne compute internal http://controller:8774/v2.1 "
+  async: 3600
+  poll: 0
+
+- name: Create the compute API service endpoints (admin)
+  shell: " openstack endpoint create --region RegionOne compute admin http://controller:8774/v2.1 "
+  async: 3600
+  poll: 0
+
+- name: Install Placement
+  apt:
+    name: placement-api
+    state: present
+
+- name: Create placement service
+  shell: "openstack user create --domain default --password-prompt placement"
+  async: 3600
+  poll: 0
+
+- name: Add placement user to the service project
+  shell: "openstack role add --project service --user placement admin"
+  async: 3600
+  poll: 0
+
+- name: Create  the Placement API entry
+  shell: ' openstack service create --name placement --description "Placement API" placement '
+  async: 3600
+  poll: 0
+
+- name: Create the Placement API service endpoints (public)
+  shell: " openstack endpoint create --region RegionOne placement public http://controller:8778 "
+  async: 3600
+  poll: 0
+
+- name: Create the Placement API service endpoints (internal)
+  shell: " openstack endpoint create --region RegionOne placement internal http://controller:8778 "
+  async: 3600
+  poll: 0
+
+- name: Create the Placement API service endpoints (admin)
+  shell: " openstack endpoint create --region RegionOne placement admin http://controller:8778 "
+  async: 3600
+  poll: 0
+
+- name: Install Nova packages
+  apt:
+    name:
+      - nova-api
+      - nova-conductor
+      - nova-novncproxy
+      - nova-scheduler
+    state: present
+
+- name: Edit /etc/nova/nova.conf file
+  lineinfile:
+    path: /etc/nova/nova.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - { regexp: '^connection = ', line: 'connection = mysql+pymysql://nova:nova_ogata@controller/nova_api' }
+    - { regexp: '^connection = ', line: 'connection = mysql+pymysql://nova:nova_ogata@controller/nova' }
+    - { regexp: '^transport_url = ', line: 'transport_url = rabbit://openstack:hoa13ogatarabbit@controller:5672/' }
+    - { regexp: '^auth_strategy = ', line: 'auth_strategy = keystone' }
+    - { regexp: '^www_authenticate_uri = ', line: 'www_authenticate_uri = http://controller:5000/' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000/' }
+    - { regexp: '^memcached_servers = ', line: 'memcached_servers = controller:11211' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^username = ', line: 'username = nova' }
+    - { regexp: '^password = ', line: 'password = nova_ogata' }
+    - { regexp: '^send_service_user_token = ', line: 'send_service_user_token = true' }
+    - { regexp: '^auth_url = ', line: 'auth_url = https://controller/identity' }
+    - { regexp: '^auth_strategy = ', line: 'auth_strategy = keystone' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^username = ', line: 'username = nova' }
+    - { regexp: '^password = ', line: 'password = nova_ogata' }
+    - { regexp: '^my_ip = ', line: 'my_ip = 10.0.0.11' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = default' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = default' }
+    - { regexp: '^region_name = ', line: 'region_name = RegionOne' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^username = ', line: 'username = neutron' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+    - { regexp: '^service_metadata_proxy = ', line: 'service_metadata_proxy = true' }
+    - { regexp: '^metadata_proxy_shared_secret = ', line: 'metadata_proxy_shared_secret = METADATA_SECRET' }
+    - { regexp: '^enabled = ', line: 'enabled = true' }
+    - { regexp: '^server_listen = ', line: 'server_listen = $my_ip' }
+    - { regexp: '^server_proxyclient_address = ', line: 'server_proxyclient_address = $my_ip' }
+    - { regexp: '^api_servers = ', line: 'api_servers = http://controller:9292' }
+    - { regexp: '^lock_path = ', line: 'lock_path = /var/lib/nova/tmp' }
+    - { regexp: '^region_name = ', line: 'region_name = RegionOne' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000/v3' }
+    - { regexp: '^username = ', line: 'username = placement' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+
+- name: Populate nova-api database
+  shell: ' su -s /bin/sh -c "nova-manage api_db sync" nova '
+  async: 3600
+  poll: 0
+
+- name: Register cell0 database
+  shell: ' su -s /bin/sh -c "nova-manage cell_v2 map_cell0" nova '
+  async: 3600
+  poll: 0
+
+- name: Create cell1
+  shell: ' su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova '
+  async: 3600
+  poll: 0
+
+- name: Populate nova database
+  shell: ' su -s /bin/sh -c "nova-manage db sync" nova'
+  async: 3600
+  poll: 0
+
+- name: Verify nova cell0 and cell1 registration
+  shell: ' su -s /bin/sh -c "nova-manage cell_v2 list_celss" nova '
+  async: 3600
+  poll: 0
+
+- name: Restart compute services
+  service:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+      - nova-api
+      - nova-conductor
+      - nova-novncproxy
+      - nova-scheduler

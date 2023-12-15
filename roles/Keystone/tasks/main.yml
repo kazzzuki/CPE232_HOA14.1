@@ -1,0 +1,75 @@
+
+- name: Create Keystone database
+  mysql_db:
+    name: keystone
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Grant privileges on Keystone database
+  mysql_user:
+    name: keystone
+    password: keystone_ogata
+    priv: "keystone.*:ALL"
+    state: present
+    host: "{{ item }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  loop:
+    - localhost
+    - "%"
+
+- name: Install Keystone packages
+  apt:
+    name: keystone
+    state: present
+
+- name: Edit the /etc/keystone/keystone.conf file (connection)
+  lineinfile:
+    path: /etc/keystone/keystone.conf
+    regexp: '^connection ='
+    line: 'connection = mysql+pymysql://keystone:keystone_ogata@controller/keystone'
+
+- name: Edit the /etc/keystone/keystone.conf file (fernet)
+  lineinfile:
+    path: /etc/keystone/keystone.conf
+    regexp: '^#?provider ='
+    line: 'provider = fernet'
+
+- name: Populate Identity service database
+  command: ' su -s /bin/sh -c "keystone-manage db_sync" keystone '
+  become_user: keystone
+  async: 3600
+  poll: 0
+
+- name: Initialize Fernet key repositories (fernet setup)
+  command: "keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone"
+  become_user: keystone
+
+- name: Initialize Fernet key repositories (credential setup)
+  command: "keystone-manage credential_setup --keystone-user keystone --keystone-group keystone"
+  become_user: keystone
+
+- name: Bootstrap the identity service
+  command: "keystone-manage bootstrap --bootstrap-password keystone_ogata --bootstrap-admin-url http://controller:5000/v3/ --bootstrap-internal-url http://controller:5000/v3/  --bootstrap-public-url http://controller:5000/v3/ --bootstrap-region-id RegionOne"
+  become_user: keystone
+  async: 3600
+  poll: 0
+
+- name: Configure Apache HTTP server
+  lineinfile:
+    path: /etc/apache2/apache2.conf
+    regexp: '^ServerName'
+    line: 'ServerName controller'
+
+- name: Restart Apache Service
+  service:
+    name: apache2
+    state: restarted
+
+- name: Configure administrative account
+  shell:
+    export OS_USERNAME=admin
+    export OS_PASSWORD=keystone_ogata
+    export OS_PROJECT_NAME=admin
+    export OS_USER_DOMAIN_NAME=Default
+    export OS_PROJECT_DOMAIN_NAME=Default
+    export OS_AUTH_URL=http://192.168.56.131:5000/v3
+    export OS_IDENTITY_API_VERSION=3

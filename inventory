@@ -1,0 +1,10 @@
+
+[ubuntu]
+192.168.56.131	ansible_connection=ssh
+
+[compute]
+192.168.56.131  ansible_connection=ssh
+
+[controller]
+192.168.56.131  ansible_connection=ssh
+

@@ -1,0 +1,25 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+  - name: Update
+    apt:
+      update_cache: yes
+      state: present
+
+- hosts: ubuntu
+  become: true
+  roles:
+    - Keystone
+    - Glance
+
+- hosts: compute
+  become: true
+  roles:
+    - Nova_Compute_Node
+
+- hosts: controller
+  become: true
+  roles:
+    - Nova_Controller_Node

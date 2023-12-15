@@ -1,0 +1,114 @@
+
+- name: Create Glance database
+  mysql_db:
+    name: glance
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Grant privileges on Glance database
+  mysql_user:
+    name: glance
+    password: glance_ogata
+    priv: "glance.*:ALL"
+    state: present
+    host: "{{ item }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  loop:
+    - localhost
+    - "%"
+
+- name: Source the admin credentials
+  shell: ". /home/kazuki/admin-openrc"
+
+- name: Create Glance user
+  command: " openstack user create --domain default --password-prompt glance "
+  environment:
+    OS_USERNAME: admin
+    OS_PASSWORD: glance_ogata
+    OS_PROJECT_NAME: admin
+    OS_AUTH_URL: http://192.168.56.131/v3
+  async: 3600
+  poll: 0
+
+- name: Add admin role to glance user and service project
+  command: "openstack role add --project service --user glance admin"
+  environment:
+    OS_USERNAME: admin
+    OS_PASSWORD: glance_ogata
+    OS_PROJECT_NAME: admin
+    OS_AUTH_URL: http://192.168.56.131/v3
+  async: 3600
+  poll: 0
+
+- name: Create glance service entity
+  command: ' openstack service create --name glance --description "OpenStack Image" image '
+  async: 3600
+  poll: 0
+
+- name: Create image service API endpoints (public)
+  command: ' openstack endpoint create --region RegionOne image public http://controller:9292 '
+  async: 3600
+  poll: 0
+
+- name: Create image service API endpoints (internal)
+  command: ' openstack endpoint create --region RegionOne image internal http://controller:9292 '
+  async: 3600
+  poll: 0
+
+- name: Create image service API endpoints (admin)
+  command: ' openstack endpoint create --region RegionOne image admin http://controller:9292 '
+  async: 3600
+  poll: 0
+
+- name: Install Glance packages
+  apt:
+    name: glance
+    state: present
+
+- name: Edit the /etc/glance/glance-api.conf file
+  lineinfile:
+    path: /etc/glance/glance-api.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - { regexp: '^connection = ', line: 'connection = mysql+pymysql://glance:GLANCE_DBPASS@controller/glance' }
+    - { regexp: '^www_authenticate_uri = ', line: 'www_authenticate_uri = http://controller:5000' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000' }
+    - { regexp: '^memcached_servers = ', line: 'memcached_servers = controller:11211' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^username = ', line: 'username = glance' }
+    - { regexp: '^password = ', line: 'password = GLANCE_PASS' }
+    - { regexp: '^flavor = ', line: 'flavor = keystone' }
+    - { regexp: '^stores = ', line: 'stores = file,http' }
+    - { regexp: '^default_store = ', line: 'default_store = file' }
+    - { regexp: '^filesystem_store_datadir = ', line: 'filesystem_store_datadir = /var/lib/glance/images/' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^user_domain_id = ', line: 'user_domain_id = default' }
+    - { regexp: '^username = ', line: 'username = MY_SERVICE' }
+    - { regexp: '^system_scope = ', line: 'system_scope = all' }
+    - { regexp: '^password = ', line: 'password = MY_PASSWORD' }
+    - { regexp: '^endpoint_id = ', line: 'endpoint_id = ENDPOINT_ID' }
+    - { regexp: '^region_name = ', line: 'region_name = RegionOne' }
+    - { regexp: '^use_keystone_quotas = ', line: 'use_keystone_quotas = True' }
+
+- name: Ensure MY_SERVICE reader access
+  command: " openstack role add --user MY_SERVICE --user-domain Default --system all reader "
+  environment:
+    OS_CLOUD: "devstack-system-admin"
+  async: 3600
+  poll: 0
+
+- name: Populate Image service database
+  command: 'su -s /bin/sh -c "glance-manage db_sync" glance'
+  become_user: glance
+  async: 3600
+  poll: 0
+
+- name: Restart image services
+  service:
+    name: glance-api
+    state: restarted
+

@@ -1,0 +1,66 @@
+
+- name: Install Nova packages
+  apt:
+    name: nova-compute
+    state: present
+
+- name: Edit /etc/nova/nova.conf file
+  lineinfile:
+    path: /etc/nova/nova.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - { regexp: '^transport_url = ', line: 'transport_url = rabbit://openstack:hoa13ogatarabbit@controller' }
+    - { regexp: '^auth_strategy = ', line: 'auth_strategy = keystone' }
+    - { regexp: '^www_authenticate_uri = ', line: 'www_authenticate_uri = http://controller:5000/' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000/' }
+    - { regexp: '^memcached_servers = ', line: 'memcached_servers = controller:11211' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^username = ', line: 'username = nova' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+    - { regexp: '^send_service_user_token = ', line: 'send_service_user_token = true' }
+    - { regexp: '^auth_url = ', line: 'auth_url = https://controller/identity' }
+    - { regexp: '^auth_strategy = ', line: 'auth_strategy = keystone' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_name = Default' }
+    - { regexp: '^username = ', line: 'usernam = nova' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+    - { regexp: '^my_ip = ', line: 'my_ip = 10.0.0.31' }
+    - { regexp: '^auth_url = ', line: 'auth_url://controller:5000' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^project_domain_name = ', line: 'project_domain_name = default' }
+    - { regexp: '^user_domain_name = ', line: 'user_don_name = default' }
+    - { regexp: '^region_name = ', line: 'region_name = RegionOne' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^username = ', line: 'username = neutron' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+    - { regexp: '^enabled = ', line: 'enabled = true' }
+    - { regexp: '^server_listen = ', line: 'server_listen  0.0.0.0' }
+    - { regexp: '^server_proxyclient_address = ', line: 'server_proxyclient_address = $my_ip' }
+    - { regexp: '^novncproxy_base_url = ', line: 'novncproxy_base_url = http://controller:6080/vnc_auto.html' }
+    - { regexp: '^api_servers = ', line: 'api_servers = htt://controller:9292' }
+    - { regexp: '^lock_path = ', line: 'lock_path = /var/lib/nova/tmp' }
+    - { regexp: '^region_name = ', line: 'region_name = RegionOne' }
+    - { regexp: '^project_domain_name = ', line: 'project_doain_name = Default' }
+    - { regexp: '^project_name = ', line: 'project_name = service' }
+    - { regexp: '^auth_type = ', line: 'auth_type = password' }
+    - { regexp: '^user_domain_name = ', line: 'user_domain_nae = Default' }
+    - { regexp: '^auth_url = ', line: 'auth_url = http://controller:5000/v3' }
+    - { regexp: '^username = ', line: 'username = placement' }
+    - { regexp: '^password = ', line: 'password = keystone_ogata' }
+
+- name: Edit libvirt
+  lineinfile:
+    path: /etc/nova/nova-compute.conf
+    regexp: '^virt_type'
+    line: 'virt_type = qemu'
+
+- name: Restart Compute service
+  service:
+    name: nova-compute
+    state: restarted
